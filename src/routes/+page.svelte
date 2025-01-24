@@ -1,8 +1,11 @@
 <script>
 	let activeButton = 'x';
-
+	let decideVS = '';
 	function navigateToPlayer() {
 		window.location.href = '/game';
+	}
+	function navigateToPlayervsCpu() {
+		window.location.href = '/cpu';
 	}
 </script>
 
@@ -18,22 +21,20 @@
 			<div class="btn-group mb-4 flex w-80 rounded-lg bg-bgBlue">
 				<button
 					class="btn w-40 bg-bgBlue"
-					class:bg-gray-500={activeButton === 'x'}
+					class:bg-gray-400={activeButton === 'x'}
 					class:btn-active={activeButton === 'x'}
 					on:click={() => (activeButton = activeButton === 'x' ? 'none' : 'x')}
-					class:hover:bg-gray-200={activeButton === 'x'}
-					class:hover:bg-gray-500={activeButton !== 'x'}
+					class:hover:bg-gray-400={activeButton === 'x'}
 				>
 					<img src="assets/images/SVG/icon-x-default.svg" alt="X" class="h-5 w-5" />
 				</button>
 
 				<button
 					class="btn w-40 bg-bgBlue"
-					class:bg-gray-500={activeButton === 'o'}
+					class:bg-gray-400={activeButton === 'o'}
 					class:btn-active={activeButton === 'o'}
 					on:click={() => (activeButton = activeButton === 'o' ? 'none' : 'o')}
-					class:hover:bg-gray-600={activeButton === 'o'}
-					class:hover:bg-gray-400={activeButton !== 'o'}
+					class:hover:bg-gray-400={activeButton === 'o'}
 				>
 					<img src="assets/images/SVG/icon-o-default.svg" alt="O" class="h-5 w-5" />
 				</button>
@@ -42,7 +43,13 @@
 			<p class="text-center text-xs text-gray-400">REMEMBER: X GOES FIRST</p>
 		</div>
 	</div>
-	<button class="mb-3 w-80 rounded-lg bg-yellow-500 px-6 py-3 font-bold text-gray-900">
+	<button
+		class="mb-3 w-80 rounded-lg bg-yellow-500 px-6 py-3 font-bold text-gray-900"
+		on:click={() => {
+			decideVS = 'cpu';
+			navigateToPlayer();
+		}}
+	>
 		NEW GAME (VS CPU)
 	</button>
 	<button
