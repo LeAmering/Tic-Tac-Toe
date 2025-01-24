@@ -65,7 +65,7 @@
 	<div class="grid h-80 w-80 grid-cols-3 gap-2">
 		{#each board as cell, index}
 			<button
-				class=" shadow-custom-shadowBlue flex h-20 w-20 items-center justify-center rounded bg-lgBlue text-2xl text-black"
+				class=" flex h-20 w-20 items-center justify-center rounded bg-lgBlue text-2xl text-black shadow-custom-shadowBlue"
 				on:click={() => setValue(index)}
 				disabled={!!cell || winner}
 			>
@@ -79,9 +79,18 @@
 	</div>
 
 	<dialog id="winMod" class="modal fixed inset-0 flex items-center justify-center">
-		<div class="modal-box box-border w-full max-w-full p-6">
-			<h3 class="text-lg font-bold">Hello!</h3>
-			<p class="py-4">Click the button below to close</p>
+		<div class="modal-box box-border flex w-full max-w-full items-center justify-center p-6">
+			<p>YOU WON!</p>
+			<br />
+			{#if winner === 'X'}
+				<img src="assets/images/SVG/icon-x.svg" alt="X" class="m-3 h-12 w-12" />
+			{:else if winner === 'O'}
+				<img src="assets/images/SVG/icon-o.svg" alt="O" class="m-3 h-12 w-12" />
+			{/if}
+
+			<p>takes the round</p>
+			<br />
+
 			<div class="modal-action">
 				<form method="dialog">
 					<!-- if there is a button, it will close the modal -->
