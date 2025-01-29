@@ -1,11 +1,32 @@
 <script>
-	let activeButton = 'x';
-	let decideVS = '';
-	function navigateToPlayer() {
-		window.location.href = '/game';
+	import { chosenPlayer, decideVS } from '$lib/stores';
+	import { goto } from '$app/navigation';
+	let activeButton = 'X';
+	let activeGameMode = 'player';
+
+	function choosePlayer(button) {
+		activeButton = button;
+		chosenPlayer.set(activeButton);
+		if (typeof window !== 'undefined') {
+			localStorage.setItem('chosenPlayer', activeButton);
+		}
+		console.log('Chosen Player:', $chosenPlayer);
 	}
+
+	function navigateToPlayer() {
+		decideVS.set('player');
+		if (typeof window !== 'undefined') {
+			localStorage.setItem('decideVS', 'player');
+		}
+		goto('/game');
+	}
+
 	function navigateToPlayervsCpu() {
-		window.location.href = '/cpu';
+		decideVS.set('cpu');
+		if (typeof window !== 'undefined') {
+			localStorage.setItem('decideVS', 'cpu');
+		}
+		goto('/game');
 	}
 </script>
 
@@ -21,20 +42,18 @@
 			<div class="btn-group mb-4 flex w-80 rounded-lg bg-bgBlue">
 				<button
 					class="btn w-40 bg-bgBlue"
-					class:bg-gray-400={activeButton === 'x'}
-					class:btn-active={activeButton === 'x'}
-					on:click={() => (activeButton = activeButton === 'x' ? 'none' : 'x')}
-					class:hover:bg-gray-400={activeButton === 'x'}
+					class:bg-gray-400={activeButton === 'X'}
+					class:btn-active={activeButton === 'X'}
+					on:click={() => choosePlayer('X')}
 				>
 					<img src="assets/images/SVG/icon-x-default.svg" alt="X" class="h-5 w-5" />
 				</button>
 
 				<button
 					class="btn w-40 bg-bgBlue"
-					class:bg-gray-400={activeButton === 'o'}
-					class:btn-active={activeButton === 'o'}
-					on:click={() => (activeButton = activeButton === 'o' ? 'none' : 'o')}
-					class:hover:bg-gray-400={activeButton === 'o'}
+					class:bg-gray-400={activeButton === 'O'}
+					class:btn-active={activeButton === 'O'}
+					on:click={() => choosePlayer('O')}
 				>
 					<img src="assets/images/SVG/icon-o-default.svg" alt="O" class="h-5 w-5" />
 				</button>
@@ -43,18 +62,16 @@
 			<p class="text-center text-xs text-gray-400">REMEMBER: X GOES FIRST</p>
 		</div>
 	</div>
+
 	<button
 		class="mb-3 w-80 rounded-lg bg-yellow-500 px-6 py-3 font-bold text-gray-900"
-		on:click={() => {
-			decideVS = 'cpu';
-			navigateToPlayer();
-		}}
+		on:click={navigateToPlayervsCpu}
 	>
 		NEW GAME (VS CPU)
 	</button>
 	<button
 		class="w-80 rounded-lg bg-grBlue px-6 py-3 font-bold text-gray-900"
-		on:click={navigateToPlayer()}
+		on:click={navigateToPlayer}
 	>
 		NEW GAME (VS PLAYER)
 	</button>
