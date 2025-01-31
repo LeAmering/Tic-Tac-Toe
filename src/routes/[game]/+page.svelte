@@ -31,7 +31,10 @@
 	}
 
 	function returnHome() {
-		goto('/'); // Navigates to the homepage
+		if (typeof window !== 'undefined') {
+			localStorage.setItem('chosenPlayer', $chosenPlayer); // Ensure chosen player is stored
+		}
+		goto('/');
 	}
 
 	function onPageLoad() {
@@ -84,40 +87,50 @@
 			[2, 4, 6]
 		];
 
+		if (winner || isDraw) return;
+
 		for (const combo of winCombos) {
 			const [a, b, c] = combo;
 			if (board[a] && board[a] === board[b] && board[a] === board[c]) {
 				winner = board[a];
+
 				if (winner === 'X') {
 					scoreX++;
 				} else {
 					scoreO++;
 				}
-				winMod.showModal();
+
+				setTimeout(() => winMod.showModal(), 100);
 				return;
 			}
 		}
 
 		if (board.every((cell) => cell !== '')) {
 			isDraw = true;
-			drawMod.showModal();
+			setTimeout(() => drawMod.showModal(), 100);
 			scoreTies++;
 		}
 	}
 
 	function restartGame() {
-		board = Array(9).fill('');
-		currentPlayer = 'X';
-		winner = null;
-		isDraw = false;
+		setTimeout(() => {
+			board = Array(9).fill('');
+			currentPlayer = 'X';
+			winner = null;
+			isDraw = false;
 
-		if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
-			cpuMove();
-		}
+			winMod.close();
+			drawMod.close();
+
+			if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
+				cpuMove();
+			}
+		}, 200);
 	}
 </script>
 
 <main class="flex h-screen flex-col items-center justify-center bg-bgBlue text-gray-100">
+	<!-- obere Zeile -->
 	<div class="relative mt-1 grid w-80 grid-cols-3 gap-2">
 		<img src="assets/images/SVG/logo.svg" alt="x" class="h-12 w-12" />
 		<div
@@ -156,12 +169,15 @@
 			<span>TURN</span>
 		</div>
 		<button
-			class="absolute right-0 top-0 mr-1 mt-1 h-8 w-8 items-center justify-center rounded bg-grayTie text-white shadow-md"
+			class="absolute right-5 top-0 mr-1 mt-1 h-8 w-8 items-center justify-center rounded bg-grayTie text-white shadow-custom-shadowBlue"
 			on:click={restartGame}
 		>
 			<img src="assets/images/SVG/icon-restart.svg" alt="x" class="mx-auto h-4 w-4" />
 		</button>
 	</div>
+	<!-- Ende obere Zeile -->
+
+	<!-- Spielfeld -->
 
 	<div class="grid h-80 w-80 grid-cols-3 gap-2">
 		{#each board as cell, index}
@@ -179,16 +195,20 @@
 		{/each}
 	</div>
 
+	<!-- scores -->
 	<div class="mt-1 grid w-80 grid-cols-3 gap-2">
 		<div
 			class="flex h-12 w-20 flex-col items-center justify-center rounded-lg bg-grBlue text-[8px] text-black shadow-md"
 		>
 			<p>
-				{#if $chosenPlayer === 'X'}
-					X (YOU)
-					{#if $decideVS === 'player'}
-						<br />X (Player 2)
+				{#if $decideVS === 'player'}
+					{#if $chosenPlayer === 'X'}
+						X (Player 1)
+					{:else}
+						X (Player 2)
 					{/if}
+				{:else if $chosenPlayer === 'X' && $decideVS === 'cpu'}
+					X (YOU)
 				{:else}
 					X (CPU)
 				{/if}
@@ -203,15 +223,19 @@
 			<p class="text-sm font-bold">{scoreTies}</p>
 		</div>
 
+		<!-- O Score Box -->
 		<div
 			class="flex h-12 w-20 flex-col items-center justify-center rounded-lg bg-yellow-500 text-[8px] text-black shadow-md"
 		>
 			<p>
-				{#if $chosenPlayer === 'O'}
-					O (YOU)
-					{#if $decideVS === 'player'}
-						<br />O (Player 2)
+				{#if $decideVS === 'player'}
+					{#if $chosenPlayer === 'O'}
+						O (Player 1)
+					{:else}
+						O (Player 2)
 					{/if}
+				{:else if $chosenPlayer === 'O' && $decideVS === 'cpu'}
+					O (YOU)
 				{:else}
 					O (CPU)
 				{/if}
@@ -219,6 +243,9 @@
 			<p class="text-sm font-bold">{scoreO}</p>
 		</div>
 	</div>
+
+	<!-- Modals -->
+	<!-- win Modal -->
 
 	<dialog id="winMod" class="modal fixed inset-0 flex items-center justify-center">
 		<div
@@ -230,10 +257,12 @@
 				{:else}
 					<p class="text-lg font-bold">PLAYER 2 WON</p>
 				{/if}
-			{:else if winner === $chosenPlayer}
-				<p class="text-lg font-bold">YOU WON</p>
-			{:else}
-				<p class="text-lg font-bold">CPU WON</p>
+			{:else if $decideVS === 'cpu'}
+				{#if winner === $chosenPlayer}
+					<p class="text-lg font-bold">YOU WON</p>
+				{:else}
+					<p class="text-lg font-bold">CPU WON</p>
+				{/if}
 			{/if}
 
 			<br />
@@ -248,35 +277,47 @@
 				{/if}
 			</div>
 
-			<div class="flex gap-4">
+			<div class="flex items-center gap-4">
 				<button
-					class="h-8 w-20 items-center justify-center rounded bg-grayTie text-black shadow-custom-shadowBlue"
+					class="flex h-8 w-20 items-center justify-center rounded bg-grayTie text-sm text-black shadow-custom-shadowBlue"
 					on:click={returnHome}
 				>
 					QUIT
 				</button>
-				<div class="modal-action">
-					<form method="dialog">
-						<button
-							class="h-8 w-20 items-center justify-center rounded bg-yellow-500 text-black shadow-custom-shadowBlue"
-							on:click={restartGame}
-						>
-							NEXT ROUND
-						</button>
-					</form>
-				</div>
+
+				<button
+					class="flex h-8 w-32 items-center justify-center rounded bg-yellow-500 text-sm text-black shadow-custom-shadowBlue"
+					on:click={restartGame}
+				>
+					NEXT ROUND
+				</button>
 			</div>
 		</div>
 	</dialog>
 
+	<!-- draw Modal -->
 	<dialog id="drawMod" class="modal fixed inset-0 flex items-center justify-center">
-		<div class="modal-box box-border flex w-full max-w-full items-center justify-center p-6">
-			<p>IT'S A DRAW!</p>
+		<div
+			class="modal-box box-border flex w-full max-w-full flex-col items-center justify-center space-y-4 p-6"
+		>
+			<p class="text-lg font-bold">IT'S A DRAW</p>
+
 			<br />
-			<div class="modal-action">
-				<form method="dialog">
-					<button class="btn">Close</button>
-				</form>
+
+			<div class="flex items-center gap-4">
+				<button
+					class="flex h-8 w-20 items-center justify-center rounded bg-grayTie text-sm text-black shadow-custom-shadowBlue"
+					on:click={returnHome}
+				>
+					QUIT
+				</button>
+
+				<button
+					class="flex h-8 w-32 items-center justify-center rounded bg-yellow-500 text-sm text-black shadow-custom-shadowBlue"
+					on:click={restartGame}
+				>
+					NEXT ROUND
+				</button>
 			</div>
 		</div>
 	</dialog>

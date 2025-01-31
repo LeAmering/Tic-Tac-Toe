@@ -1,8 +1,20 @@
 <script>
 	import { chosenPlayer, decideVS } from '$lib/stores';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+
 	let activeButton = 'X';
 	let activeGameMode = 'player';
+
+	onMount(() => {
+		if (typeof window !== 'undefined') {
+			const storedPlayer = localStorage.getItem('chosenPlayer');
+			if (storedPlayer) {
+				activeButton = storedPlayer; // Update UI with stored value
+				chosenPlayer.set(storedPlayer);
+			}
+		}
+	});
 
 	function choosePlayer(button) {
 		activeButton = button;
