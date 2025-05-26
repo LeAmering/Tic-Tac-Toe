@@ -2,6 +2,7 @@
 	import { chosenPlayer, decideVS } from '$lib/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import Login from '$lib/components/login.svelte';
 
 	let activeButton = 'X';
 	let activeGameMode = 'player';
@@ -43,6 +44,8 @@
 </script>
 
 <main class="flex h-screen flex-col items-center justify-center bg-bgBlue text-gray-100">
+	<Login></Login>
+
 	<div class="mb-8 flex items-center gap-2">
 		<img src="assets/images/SVG/icon-x.svg" alt="x" class="m-3 h-12 w-12" />
 		<img src="assets/images/SVG/icon-o.svg" alt="o" class="m-3 h-12 w-12" />
