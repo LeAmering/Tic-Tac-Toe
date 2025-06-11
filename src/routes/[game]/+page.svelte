@@ -32,7 +32,7 @@
 
 	function returnHome() {
 		if (typeof window !== 'undefined') {
-			localStorage.setItem('chosenPlayer', $chosenPlayer); // Ensure chosen player is stored
+			localStorage.setItem('chosenPlayer', $chosenPlayer);
 		}
 		goto('/');
 	}
