@@ -45,6 +45,7 @@
 	}
 
 	function setValue(index) {
+		let boardOld = [...board]; // Create a copy of the board
 		if (board[index] === '' && !winner) {
 			if ($decideVS === 'player' || currentPlayer === $chosenPlayer) {
 				board[index] = currentPlayer;
@@ -57,6 +58,25 @@
 				}
 			}
 		}
+		let boardNew = [...board]; //neu für Präsi
+		fetch('/checkBoard', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ boardOld, boardNew })
+		})
+			.then((response) => response.json())
+			.then((data) => {
+				if (data.error) {
+					console.error('Error:', data.error);
+				} else {
+					console.log('Board updated successfully');
+				}
+			})
+			.catch((error) => {
+				console.error('Fetch error:', error);
+			});
 	}
 	function cpuMove() {
 		const availableMoves = board.reduce((acc, cell, index) => {
