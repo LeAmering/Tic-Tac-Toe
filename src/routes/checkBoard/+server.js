@@ -2,13 +2,8 @@ export async function POST({ request }) {
 	try {
 		const { boardOld, boardNew } = await request.json();
 
-		if (
-			!Array.isArray(boardOld) ||
-			!Array.isArray(boardNew) ||
-			boardOld.length !== 9 ||
-			boardNew.length !== 9
-		) {
-			return new Response(JSON.stringify({ error: 'Invalid board data' }), { status: 400 });
+		if (boardOld.length !== 9 || boardNew.length !== 9) {
+			return new Response(JSON.stringify({ error: 'invalid length' }), { status: 400 });
 		}
 
 		let changes = [];

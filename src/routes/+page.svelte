@@ -4,9 +4,12 @@
 	import { onMount } from 'svelte';
 	import Login from '$lib/components/login.svelte';
 	import { pb } from '$lib/pocketbase.js';
+	import { navigate } from 'svelte-routing';
 
-	let activeButton = 'X';
-	let activeGameMode = 'player';
+	let activeButton = $state('X');
+	let activeGameMode = $state('player');
+	let gameCode = $state('');
+	let gameCodeInput = $state('');
 
 	onMount(() => {
 		if (typeof window !== 'undefined') {
@@ -42,6 +45,50 @@
 		}
 		goto('/game');
 	}
+
+	function navigateToOnlinePlayer() {
+		decideVS.set('online');
+		if (typeof window !== 'undefined') {
+			localStorage.setItem('decideVS', 'online');
+		}
+
+		goto('/game');
+	}
+
+	async function createCode() {
+		const record = await pb.collection('games').create({
+			player1: pb.authStore.model.id,
+			gameCode: Math.random().toString(36).substring(2, 8)
+		});
+
+		localStorage.setItem('gameID', record.id);
+		decideVS.set('online');
+		localStorage.setItem('decideVS', 'online');
+
+		goto('/game');
+	}
+
+	async function joinGame() {
+		if (gameCodeInput.trim() === '') {
+			alert('Please enter a game code.');
+			return;
+		}
+
+		// try {
+		const record = await pb.collection('games').getFirstListItem(`gameCode="${gameCodeInput}"`);
+
+		if (record.player2) {
+			alert('This game already has a second player.');
+			return;
+		}
+
+		await pb.collection('games').update(record.id, {
+			player2: pb.authStore.model.id,
+			status: 'active'
+		});
+
+		navigateToOnlinePlayer();
+	}
 </script>
 
 <main class="flex h-screen flex-col items-center justify-center bg-bgBlue text-gray-100">
@@ -59,7 +106,7 @@
 						class="btn w-40 bg-bgBlue"
 						class:bg-gray-400={activeButton === 'X'}
 						class:btn-active={activeButton === 'X'}
-						on:click={() => choosePlayer('X')}
+						onclick={() => choosePlayer('X')}
 					>
 						<img src="assets/images/SVG/icon-x-default.svg" alt="X" class="h-5 w-5" />
 					</button>
@@ -68,7 +115,7 @@
 						class="btn w-40 bg-bgBlue"
 						class:bg-gray-400={activeButton === 'O'}
 						class:btn-active={activeButton === 'O'}
-						on:click={() => choosePlayer('O')}
+						onclick={() => choosePlayer('O')}
 					>
 						<img src="assets/images/SVG/icon-o-default.svg" alt="O" class="h-5 w-5" />
 					</button>
@@ -80,23 +127,36 @@
 
 		<button
 			class="mb-3 w-80 rounded-lg bg-yellow-500 px-6 py-3 font-bold text-gray-900"
-			on:click={navigateToPlayervsCpu}
+			onclick={navigateToPlayervsCpu}
 		>
 			NEW GAME (VS CPU)
 		</button>
 		<button
 			class="mb-3 w-80 rounded-lg bg-grBlue px-6 py-3 font-bold text-gray-900"
-			on:click={navigateToPlayer}
+			onclick={navigateToPlayer}
 		>
 			NEW GAME (VS LOCAL PLAYER)
 		</button>
 		<button
 			class=" w-80 rounded-lg bg-yellow-500 px-6 py-3 font-bold text-gray-900"
-			on:click={navigateToPlayervsCpu}
+			onclick={choose_game_id.showModal()}
 		>
 			NEW GAME (VS ONLINE PLAYER)
 		</button>
 	{:else}
 		<Login></Login>
 	{/if}
+
+	<dialog id="choose_game_id" class="modal">
+		<div class="modal-box">
+			<button class="btn btn-primary" onclick={createCode}>Create Game</button>
+			<input type="text" placeholder="Enter game Code" bind:value={gameCodeInput} />
+			<button class="btn btn-primary" onclick={joinGame}>Join Game</button>
+			<div class="modal-action">
+				<form method="dialog">
+					<button class="btn">Close</button>
+				</form>
+			</div>
+		</div>
+	</dialog>
 </main>
