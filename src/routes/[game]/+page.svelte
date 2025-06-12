@@ -14,7 +14,6 @@
 	let scoreTies = $state(0);
 	let game = $state(null);
 	let player2 = $state(null);
-	let turn = $state(null);
 	let userID = $state(null);
 
 	function generateCode() {
@@ -22,47 +21,59 @@
 	}
 
 	onMount(async () => {
-		if (typeof window !== 'undefined') {
-			const storedPlayer = localStorage.getItem('chosenPlayer');
-			const storedGameMode = localStorage.getItem('decideVS');
-			if (storedPlayer) chosenPlayer.set(storedPlayer);
-			if (storedGameMode) decideVS.set(storedGameMode);
-		}
+		if (typeof window === 'undefined') return;
+		const sp = localStorage.getItem('chosenPlayer');
+		const sv = localStorage.getItem('decideVS');
+		if (sp) chosenPlayer.set(sp);
+		if (sv) decideVS.set(sv);
 
 		userID = pb.authStore.model?.id;
-		const gameID = localStorage.getItem('gameID');
+		const mode = get(decideVS);
 
-		if (get(decideVS) === 'online') {
-			if (gameID) {
-				try {
-					let fetchedGame = await pb.collection('games').getOne(gameID);
-					if (!fetchedGame.player2 && fetchedGame.player1 !== userID) {
-						const updatedGame = await pb.collection('games').update(gameID, {
-							player2: userID,
-							p1Symbol: fetchedGame.p1Symbol || 'X',
-							p2Symbol: fetchedGame.p2Symbol || (fetchedGame.p1Symbol === 'X' ? 'O' : 'X'),
-							turn: fetchedGame.p1Symbol === 'X' ? fetchedGame.player1 : userID
-						});
-						game = updatedGame;
-					} else {
-						game = fetchedGame;
-					}
-				} catch (error) {
-					console.error('Error fetching game:', error);
+		if (mode === 'online') {
+			const params = new URLSearchParams(location.search);
+			const codeParam = params.get('code');
+
+			if (codeParam) {
+				const res = await pb
+					.collection('games')
+					.getList(1, 1, { filter: `gameCode="${codeParam}"` });
+				const fetched = res.items[0];
+				if (
+					fetched &&
+					!fetched.player2 &&
+					fetched.status === 'waiting' &&
+					fetched.player1 !== userID
+				) {
+					const updated = await pb.collection('games').update(fetched.id, {
+						player2: userID,
+						turn: fetched.p1Symbol === 'X' ? fetched.player1 : userID
+					});
+					localStorage.setItem('gameID', fetched.id);
+					game = updated;
+				} else {
+					console.error('Cannot join: game not found or not joinable.');
 					game = await createGame();
 				}
 			} else {
-				game = await createGame();
+				const storedID = localStorage.getItem('gameID');
+				if (storedID) {
+					try {
+						game = await pb.collection('games').getOne(storedID);
+					} catch {
+						localStorage.removeItem('gameID');
+						game = await createGame();
+					}
+				} else {
+					game = await createGame();
+				}
 			}
 
 			if (game?.id) {
 				pb.collection('games').subscribe(game.id, (e) => {
 					game = { ...e.record };
-					if (Array.isArray(game.field)) {
-						board.splice(0, board.length, ...game.field);
-					} else {
-						board = Array(9).fill('');
-					}
+					if (Array.isArray(game.field)) board.splice(0, board.length, ...game.field);
+					else board = Array(9).fill('');
 					currentPlayer = game.turn === game.player1 ? game.p1Symbol : game.p2Symbol;
 					winner = null;
 					isDraw = false;
@@ -71,6 +82,7 @@
 				});
 			}
 		}
+
 		onPageLoad();
 	});
 
@@ -90,7 +102,7 @@
 			gameCode: generateCode(),
 			p1Symbol: $chosenPlayer === 'X' ? 'X' : 'O',
 			p2Symbol: $chosenPlayer === 'X' ? 'O' : 'X',
-			turn: $chosenPlayer === 'X' ? pb.authStore.model.id : 'Player 2 ID'
+			turn: $chosenPlayer === 'X' ? pb.authStore.model.id : null // turn starts only when player2 joins
 		};
 
 		const createdGame = await pb.collection('games').create(newGameData);
@@ -189,12 +201,17 @@
 	function restartGame() {
 		setTimeout(async () => {
 			if ($decideVS === 'online' && game) {
+				// Optionally clear localStorage to force a new game next time
+				localStorage.removeItem('gameID');
+
+				// Reset online game state
 				await pb.collection('games').update(game.id, {
 					field: Array(9).fill(''),
 					turn: game.p1Symbol === 'X' ? game.player1 : game.player2,
 					status: 'playing'
 				});
 			} else {
+				// Reset local game state
 				board = Array(9).fill('');
 				currentPlayer = 'X';
 				winner = null;
