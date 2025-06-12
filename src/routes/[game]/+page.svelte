@@ -110,19 +110,28 @@
 		return createdGame;
 	}
 
+	// function onPageLoad() {
+	// 	if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
+	// 		cpuMove();
+	// 	}
+	// }
+
 	function onPageLoad() {
-		if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
+		const mode = get(decideVS);
+		const player = get(chosenPlayer);
+		if (mode === 'cpu' && player === 'O') {
 			cpuMove();
 		}
 	}
 
 	async function setValue(index) {
-		if (!game || board[index] !== '' || winner || isDraw) return;
+		if (board[index] !== '' || winner || isDraw) return;
 
 		const isOnline = $decideVS === 'online';
 
 		if (isOnline) {
-			if (!game.player1 || !game.player2 || game.turn !== userID) return;
+			// Online Mode
+			if (!game || !game.player1 || !game.player2 || game.turn !== userID) return;
 
 			const mySymbol = userID === game.player1 ? game.p1Symbol : game.p2Symbol;
 			const updatedField = [...board];
@@ -134,21 +143,24 @@
 				turn: nextTurn
 			});
 		} else {
-			let boardOld = [...board];
+			// Local Player or CPU
 			board[index] = currentPlayer;
-			currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
 			checkGameStatus();
-			board = [...board];
 
-			if ($decideVS === 'cpu' && $chosenPlayer !== currentPlayer && !winner) {
-				setTimeout(cpuMove, 400);
+			if (!winner && !isDraw) {
+				currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+
+				if ($decideVS === 'cpu' && $chosenPlayer !== currentPlayer) {
+					setTimeout(cpuMove, 400);
+				}
 			}
 
+			// Optional: analytics/tracking between old/new board state
 			let boardNew = [...board];
 			fetch('/checkBoard', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ boardOld, boardNew })
+				body: JSON.stringify({ boardOld: [...board], boardNew })
 			});
 		}
 	}
