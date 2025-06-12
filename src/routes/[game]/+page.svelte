@@ -5,7 +5,6 @@
 	import { pb } from '$lib/pocketbase';
 	import { get } from 'svelte/store'; // For synchronous store reads
 
-	let userID;
 	let currentPlayer = $state('X');
 	let board = $state(Array(9).fill(''));
 	let winner = $state(null);
@@ -16,6 +15,11 @@
 	let game = $state(null);
 	let player2 = $state(null);
 	let turn = $state(null);
+	let userID = $state(null);
+
+	function generateCode() {
+		return Math.random().toString(36).substring(2, 8).toUpperCase();
+	}
 
 	onMount(async () => {
 		if (typeof window !== 'undefined') {
@@ -31,33 +35,73 @@
 		}
 
 		userID = pb.authStore.model?.id;
+		console.log('Current user ID:', userID);
+
 		const gameID = localStorage.getItem('gameID');
+		console.log('Game ID from localStorage:', gameID);
 
 		if (get(decideVS) === 'online') {
 			if (gameID) {
-				let fetchedGame = await pb.collection('games').getOne(gameID);
+				try {
+					let fetchedGame = await pb.collection('games').getOne(gameID);
+					console.log('Fetched game:', fetchedGame);
 
-				if (!fetchedGame.player2 && fetchedGame.player1 !== userID) {
-					await pb.collection('games').update(gameID, {
-						player2: userID
-					});
+					if (!fetchedGame.player2 && fetchedGame.player1 !== userID) {
+						// Update game with second player and set turn properly
+						const updatedGame = await pb.collection('games').update(gameID, {
+							player2: userID,
+							// Set turn to whoever should go first (X player)
+							p1Symbol: fetchedGame.p1Symbol || 'X',
+							p2Symbol: fetchedGame.p2Symbol || (fetchedGame.p1Symbol === 'X' ? 'O' : 'X'),
+							turn: fetchedGame.p1Symbol === 'X' ? fetchedGame.player1 : userID
+						});
+						console.log('Updated game with second player:', updatedGame);
+						game = updatedGame;
+					} else {
+						game = fetchedGame;
+					}
+				} catch (error) {
+					console.error('Error fetching game:', error);
+					// If game doesn't exist, create a new one
+					game = await createGame();
 				}
-
-				game = await pb.collection('games').getOne(gameID);
 			} else {
 				game = await createGame();
 			}
 
+			console.log('Final game object:', game);
+
 			if (game && game.id) {
 				pb.collection('games').subscribe(game.id, (e) => {
+					console.log('Game updated via subscription:', e.record);
 					game = { ...e.record }; // trigger reactivity
 
-					board.splice(0, board.length, ...game.board);
-					currentPlayer = game.currentPlayer;
+					if (Array.isArray(game.field)) {
+						board.splice(0, board.length, ...game.field);
+					} else {
+						console.warn('game.field is not an array:', game.field);
+						board = Array(9).fill('');
+					}
+
+					// Determine current player from turn relation
+					if (game.turn === game.player1) {
+						currentPlayer = game.p1Symbol;
+					} else if (game.turn === game.player2) {
+						currentPlayer = game.p2Symbol;
+					}
+					field = game.field || Array(9).fill('');
+
 					winner = null;
 					isDraw = false;
 					player2 = game.player2;
-					turn = game.currentPlayer === game.p1Symbol ? game.player1 : game.player2;
+
+					console.log('Updated local state:', {
+						board,
+						currentPlayer,
+						player2,
+						turn,
+						gameStatus: game.status
+					});
 
 					checkGameStatus();
 				});
@@ -74,71 +118,99 @@
 	}
 
 	async function createGame() {
-		const newGame = await pb.collection('games').create({
+		const newGame = {
 			player1: pb.authStore.model.id,
-			board: Array(9).fill(''),
-			currentPlayer: 'X',
+			field: Array(9).fill(''),
+			status: 'waiting',
 			gameCode: generateCode(),
-			p1Symbol: p1Symbol,
-			p2Symbol: p1Symbol === 'X' ? 'O' : 'X',
-			turn: p1Symbol === 'X' ? player1 : player2
+			p1Symbol: $chosenPlayer === 'X' ? 'X' : 'O',
+			p2Symbol: $chosenPlayer === 'X' ? 'O' : 'X',
+			turn: $chosenPlayer === 'X' ? pb.authStore.model.id : 'Player 2 ID'
+		};
+		await pb.collection('games').create(newGame);
+
+		console.log('Creating game with:', {
+			player1: pb.authStore.model.id,
+			p1Symbol,
+			p2Symbol,
+			chosenPlayer: playerSymbol
 		});
+		console.log('Created new game:', newGame);
+		console.log(player1);
+		console.log(p1Symbol);
 		localStorage.setItem('gameID', newGame.id);
 		return newGame;
 	}
 
 	function onPageLoad() {
-		// if ($decideVS === 'online' && !game) {
-		// 	createGame();
-		// }
-		// if ($decideVS !== 'online' && !game) {
-		// 	createGame();
-		// }
 		if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
 			cpuMove();
 			console.log('CPU Move');
 		}
 		if ($decideVS === 'online') {
 			console.log('Online mode selected');
+			console.log(userID);
 		}
 	}
 
 	async function setValue(index) {
-		if (!game || !game.currentPlayer || !game.p1Symbol || !game.p2Symbol) {
-			console.log('Game not fully initialized yet');
+		console.log('setValue called', { index, game, boardCell: board[index] });
+
+		if (!game) {
+			console.log('No game object');
 			return;
 		}
 
-		if (board[index] !== '' || winner || isDraw) return;
+		if (board[index] !== '' || winner || isDraw) {
+			console.log('Cell occupied or game over');
+			return;
+		}
 
 		const isOnline = $decideVS === 'online';
 
 		if (isOnline) {
-			// Restrict move to only the active player
-			const mySymbol = userID === game.player1 ? game.p1Symbol : game.p2Symbol;
-			const isMyTurn = game.currentPlayer === mySymbol;
+			// Make sure both players are present
+			if (!game.player1 || !game.player2) {
+				console.log('Not all players present', { player1: game.player1, player2: game.player2 });
+				return;
+			}
+
+			// Check if it's the current user's turn
+			const isMyTurn = game.turn === userID;
+
+			console.log('Turn check:', {
+				userID,
+				gameTurn: game.turn,
+				isMyTurn,
+				player1: game.player1,
+				player2: game.player2,
+				p1Symbol: game.p1Symbol,
+				p2Symbol: game.p2Symbol
+			});
 
 			if (!isMyTurn) {
-				console.log('userID:', userID);
-				console.log('game.currentPlayer:', game.currentPlayer);
-				console.log('player1:', game.player1);
-				console.log('player2:', game.player2);
-				console.log('turn:', game.turn);
-				console.log('My Symbol:', game.p1Symbol);
-				console.log('Opponent Symbol:', game.p2Symbol);
-
 				console.log('Not your turn');
 				return;
 			}
 
-			const updatedBoard = [...board];
-			updatedBoard[index] = game.currentPlayer;
+			// Determine what symbol the current player should use
+			const mySymbol = userID === game.player1 ? game.p1Symbol : game.p2Symbol;
 
-			const nextPlayer = game.currentPlayer === 'X' ? 'O' : 'X';
+			const updatedField = [...board];
+			updatedField[index] = mySymbol;
+
+			// Calculate next turn (switch to the other player)
+			const nextTurn = game.turn === game.player1 ? game.player2 : game.player1;
+
+			console.log('Making move:', {
+				updatedField,
+				mySymbol,
+				nextTurn
+			});
 
 			await pb.collection('games').update(game.id, {
-				board: updatedBoard,
-				currentPlayer: nextPlayer
+				field: updatedField, // Use 'field' instead of 'board'
+				turn: nextTurn
 			});
 		} else {
 			let boardOld = [...board];
@@ -217,18 +289,28 @@
 	}
 
 	function restartGame() {
-		setTimeout(() => {
-			board = Array(9).fill('');
-			currentPlayer = 'X';
-			winner = null;
-			isDraw = false;
+		setTimeout(async () => {
+			if ($decideVS === 'online' && game) {
+				// For online games, update the database
+				await pb.collection('games').update(game.id, {
+					field: Array(9).fill(''), // Use 'field' instead of 'board'
+					turn: game.p1Symbol === 'X' ? game.player1 : game.player2,
+					status: 'playing'
+				});
+			} else {
+				// For local games, just reset the state
+				board = Array(9).fill('');
+				currentPlayer = 'X';
+				winner = null;
+				isDraw = false;
+
+				if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
+					cpuMove();
+				}
+			}
 
 			winMod.close();
 			drawMod.close();
-
-			if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
-				cpuMove();
-			}
 		}, 200);
 	}
 </script>
@@ -318,6 +400,12 @@
 						{:else}
 							X (Player 2)
 						{/if}
+					{:else if $decideVS === 'online'}
+						{#if game?.p1Symbol === 'X'}
+							X (P1)
+						{:else}
+							X (P2)
+						{/if}
 					{:else if $chosenPlayer === 'X' && $decideVS === 'cpu'}
 						X (YOU)
 					{:else}
@@ -344,6 +432,12 @@
 							O (Player 1)
 						{:else}
 							O (Player 2)
+						{/if}
+					{:else if $decideVS === 'online'}
+						{#if game?.p1Symbol === 'O'}
+							O (P1)
+						{:else}
+							O (P2)
 						{/if}
 					{:else if $chosenPlayer === 'O' && $decideVS === 'cpu'}
 						O (YOU)
@@ -380,6 +474,12 @@
 					<p class="text-lg font-bold">PLAYER 1 WON</p>
 				{:else}
 					<p class="text-lg font-bold">PLAYER 2 WON</p>
+				{/if}
+			{:else if $decideVS === 'online'}
+				{#if (userID === game?.player1 && winner === game?.p1Symbol) || (userID === game?.player2 && winner === game?.p2Symbol)}
+					<p class="text-lg font-bold">YOU WON</p>
+				{:else}
+					<p class="text-lg font-bold">OPPONENT WON</p>
 				{/if}
 			{:else if $decideVS === 'cpu'}
 				{#if winner === $chosenPlayer}

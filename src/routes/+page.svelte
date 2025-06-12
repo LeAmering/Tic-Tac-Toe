@@ -56,12 +56,8 @@
 	}
 
 	async function createCode() {
-		const record = await pb.collection('games').create({
-			player1: pb.authStore.model.id,
-			gameCode: Math.random().toString(36).substring(2, 8)
-		});
-
-		localStorage.setItem('gameID', record.id);
+		// const gameCode = Math.random().toString(36).substring(2, 8);
+		// localStorage.setItem('gameCode', gameCode);
 		decideVS.set('online');
 		localStorage.setItem('decideVS', 'online');
 
