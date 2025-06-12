@@ -3,6 +3,9 @@
 	import { goto } from '$app/navigation'; // Import goto function
 	import { onMount } from 'svelte';
 	import { pb } from '$lib/pocketbase';
+	import { get } from 'svelte/store'; // For synchronous store reads
+
+	let userID;
 	let currentPlayer = $state('X');
 	let board = $state(Array(9).fill(''));
 	let winner = $state(null);
@@ -11,6 +14,8 @@
 	let scoreO = $state(0);
 	let scoreTies = $state(0);
 	let game = $state(null);
+	let player2 = $state(null);
+	let turn = $state(null);
 
 	onMount(async () => {
 		if (typeof window !== 'undefined') {
@@ -24,14 +29,41 @@
 				decideVS.set(storedGameMode);
 			}
 		}
-		onPageLoad();
-		console.log('Game Mode:', $decideVS);
-		console.log('Chosen Player:', $chosenPlayer);
+
+		userID = pb.authStore.model?.id;
 		const gameID = localStorage.getItem('gameID');
-		console.log('Game ID:', gameID);
-		if (gameID) {
-			game = await pb.collection('games').getOne(gameID);
+
+		if (get(decideVS) === 'online') {
+			if (gameID) {
+				let fetchedGame = await pb.collection('games').getOne(gameID);
+
+				if (!fetchedGame.player2 && fetchedGame.player1 !== userID) {
+					await pb.collection('games').update(gameID, {
+						player2: userID
+					});
+				}
+
+				game = await pb.collection('games').getOne(gameID);
+			} else {
+				game = await createGame();
+			}
+
+			if (game && game.id) {
+				pb.collection('games').subscribe(game.id, (e) => {
+					game = { ...e.record }; // trigger reactivity
+
+					board.splice(0, board.length, ...game.board);
+					currentPlayer = game.currentPlayer;
+					winner = null;
+					isDraw = false;
+					player2 = game.player2;
+					turn = game.currentPlayer === game.p1Symbol ? game.player1 : game.player2;
+
+					checkGameStatus();
+				});
+			}
 		}
+		onPageLoad();
 	});
 
 	function returnHome() {
@@ -42,13 +74,26 @@
 	}
 
 	async function createGame() {
-		const gameData = {
-			player1: pb.authStore.model.id
-		};
+		const newGame = await pb.collection('games').create({
+			player1: pb.authStore.model.id,
+			board: Array(9).fill(''),
+			currentPlayer: 'X',
+			gameCode: generateCode(),
+			p1Symbol: p1Symbol,
+			p2Symbol: p1Symbol === 'X' ? 'O' : 'X',
+			turn: p1Symbol === 'X' ? player1 : player2
+		});
+		localStorage.setItem('gameID', newGame.id);
+		return newGame;
 	}
 
 	function onPageLoad() {
-		createGame();
+		// if ($decideVS === 'online' && !game) {
+		// 	createGame();
+		// }
+		// if ($decideVS !== 'online' && !game) {
+		// 	createGame();
+		// }
 		if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
 			cpuMove();
 			console.log('CPU Move');
@@ -58,50 +103,65 @@
 		}
 	}
 
-	function setValue(index) {
-		let boardOld = [...board]; // Create a copy of the board
-		if (board[index] === '' && !winner) {
-			if ($decideVS === 'player' || currentPlayer === $chosenPlayer) {
-				board[index] = currentPlayer;
-				currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-				checkGameStatus();
-				board = [...board];
-
-				if ($decideVS === 'cpu' && $chosenPlayer !== currentPlayer && !winner) {
-					setTimeout(cpuMove, 400);
-				}
-			} else if ($decideVS === 'online') {
-				board[index] = currentPlayer;
-				currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-				checkGameStatus();
-				board = [...board];
-
-				// Send the updated board to the server
-				sendBoardUpdate(boardOld);
-			} else {
-				console.log('Not your turn');
-			}
+	async function setValue(index) {
+		if (!game || !game.currentPlayer || !game.p1Symbol || !game.p2Symbol) {
+			console.log('Game not fully initialized yet');
+			return;
 		}
-		let boardNew = [...board]; //neu für Präsi
-		fetch('/checkBoard', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ boardOld, boardNew })
-		})
-			.then((response) => response.json())
-			.then((data) => {
-				if (data.error) {
-					console.error('Error:', data.error);
-				} else {
-					console.log('Board updated successfully');
-				}
-			})
-			.catch((error) => {
-				console.error('Fetch error:', error);
+
+		if (board[index] !== '' || winner || isDraw) return;
+
+		const isOnline = $decideVS === 'online';
+
+		if (isOnline) {
+			// Restrict move to only the active player
+			const mySymbol = userID === game.player1 ? game.p1Symbol : game.p2Symbol;
+			const isMyTurn = game.currentPlayer === mySymbol;
+
+			if (!isMyTurn) {
+				console.log('userID:', userID);
+				console.log('game.currentPlayer:', game.currentPlayer);
+				console.log('player1:', game.player1);
+				console.log('player2:', game.player2);
+				console.log('turn:', game.turn);
+				console.log('My Symbol:', game.p1Symbol);
+				console.log('Opponent Symbol:', game.p2Symbol);
+
+				console.log('Not your turn');
+				return;
+			}
+
+			const updatedBoard = [...board];
+			updatedBoard[index] = game.currentPlayer;
+
+			const nextPlayer = game.currentPlayer === 'X' ? 'O' : 'X';
+
+			await pb.collection('games').update(game.id, {
+				board: updatedBoard,
+				currentPlayer: nextPlayer
 			});
+		} else {
+			let boardOld = [...board];
+
+			board[index] = currentPlayer;
+			currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+			checkGameStatus();
+			board = [...board];
+
+			if ($decideVS === 'cpu' && $chosenPlayer !== currentPlayer && !winner) {
+				setTimeout(cpuMove, 400);
+			}
+
+			// For local check comparison
+			let boardNew = [...board];
+			fetch('/checkBoard', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ boardOld, boardNew })
+			});
+		}
 	}
+
 	function cpuMove() {
 		const availableMoves = board.reduce((acc, cell, index) => {
 			if (cell === '') {
@@ -175,7 +235,13 @@
 
 <main class="flex h-screen flex-col items-center justify-center bg-bgBlue text-gray-100">
 	<!-- obere Zeile -->
-	{#if $decideVS !== 'online' || (game && !game.player2)}
+	{#if $decideVS === 'online' && game?.gameCode}
+		<div class="mb-4 text-center">
+			<p class="text-sm text-gray-300">Game Code:</p>
+			<p class="font-mono text-lg text-yellow-400">{game.gameCode}</p>
+		</div>
+	{/if}
+	{#if $decideVS !== 'online' || ($decideVS === 'online' && game?.player1 && game?.player2)}
 		<div class="relative mt-1 grid w-80 grid-cols-3 gap-2">
 			<img src="assets/images/SVG/logo.svg" alt="x" class="h-12 w-12" />
 			<div
@@ -290,8 +356,18 @@
 		</div>
 		<!-- Ende Spielfeld und scores -->
 	{:else}
-		<h1>Waiting for second player</h1>
+		<div class="mt-8 flex flex-col items-center justify-center space-y-2">
+			<h1 class="text-xl font-bold">Waiting for second player...</h1>
+			{#if game && game.gameCode}
+				<p class="text-lg text-yellow-300">
+					Game Code: <span class="font-mono">{game.gameCode}</span>
+				</p>
+			{:else}
+				<p class="text-sm text-gray-400">Loading game code...</p>
+			{/if}
+		</div>
 	{/if}
+
 	<!-- Modals -->
 	<!-- win Modal -->
 

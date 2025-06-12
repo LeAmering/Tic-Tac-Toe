@@ -86,6 +86,11 @@
 			player2: pb.authStore.model.id,
 			status: 'active'
 		});
+		localStorage.setItem('gameID', record.id);
+
+		decideVS.set('online');
+		localStorage.setItem('decideVS', 'online');
+		goto('/game');
 
 		navigateToOnlinePlayer();
 	}
