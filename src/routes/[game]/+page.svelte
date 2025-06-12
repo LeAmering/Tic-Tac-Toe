@@ -1,9 +1,9 @@
 <script>
-	import { chosenPlayer, decideVS } from '$lib/stores'; // Import both stores
-	import { goto } from '$app/navigation'; // Import goto function
+	import { chosenPlayer, decideVS } from '$lib/stores';
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { pb } from '$lib/pocketbase';
-	import { get } from 'svelte/store'; // For synchronous store reads
+	import { get } from 'svelte/store';
 
 	let currentPlayer = $state('X');
 	let board = $state(Array(9).fill(''));
@@ -25,84 +25,48 @@
 		if (typeof window !== 'undefined') {
 			const storedPlayer = localStorage.getItem('chosenPlayer');
 			const storedGameMode = localStorage.getItem('decideVS');
-
-			if (storedPlayer) {
-				chosenPlayer.set(storedPlayer);
-			}
-			if (storedGameMode) {
-				decideVS.set(storedGameMode);
-			}
+			if (storedPlayer) chosenPlayer.set(storedPlayer);
+			if (storedGameMode) decideVS.set(storedGameMode);
 		}
 
 		userID = pb.authStore.model?.id;
-		console.log('Current user ID:', userID);
-
 		const gameID = localStorage.getItem('gameID');
-		console.log('Game ID from localStorage:', gameID);
 
 		if (get(decideVS) === 'online') {
 			if (gameID) {
 				try {
 					let fetchedGame = await pb.collection('games').getOne(gameID);
-					console.log('Fetched game:', fetchedGame);
-
 					if (!fetchedGame.player2 && fetchedGame.player1 !== userID) {
-						// Update game with second player and set turn properly
 						const updatedGame = await pb.collection('games').update(gameID, {
 							player2: userID,
-							// Set turn to whoever should go first (X player)
 							p1Symbol: fetchedGame.p1Symbol || 'X',
 							p2Symbol: fetchedGame.p2Symbol || (fetchedGame.p1Symbol === 'X' ? 'O' : 'X'),
 							turn: fetchedGame.p1Symbol === 'X' ? fetchedGame.player1 : userID
 						});
-						console.log('Updated game with second player:', updatedGame);
 						game = updatedGame;
 					} else {
 						game = fetchedGame;
 					}
 				} catch (error) {
 					console.error('Error fetching game:', error);
-					// If game doesn't exist, create a new one
 					game = await createGame();
 				}
 			} else {
 				game = await createGame();
 			}
 
-			console.log('Final game object:', game);
-
-			if (game && game.id) {
+			if (game?.id) {
 				pb.collection('games').subscribe(game.id, (e) => {
-					console.log('Game updated via subscription:', e.record);
-					game = { ...e.record }; // trigger reactivity
-
+					game = { ...e.record };
 					if (Array.isArray(game.field)) {
 						board.splice(0, board.length, ...game.field);
 					} else {
-						console.warn('game.field is not an array:', game.field);
 						board = Array(9).fill('');
 					}
-
-					// Determine current player from turn relation
-					if (game.turn === game.player1) {
-						currentPlayer = game.p1Symbol;
-					} else if (game.turn === game.player2) {
-						currentPlayer = game.p2Symbol;
-					}
-					field = game.field || Array(9).fill('');
-
+					currentPlayer = game.turn === game.player1 ? game.p1Symbol : game.p2Symbol;
 					winner = null;
 					isDraw = false;
 					player2 = game.player2;
-
-					console.log('Updated local state:', {
-						board,
-						currentPlayer,
-						player2,
-						turn,
-						gameStatus: game.status
-					});
-
 					checkGameStatus();
 				});
 			}
@@ -118,8 +82,9 @@
 	}
 
 	async function createGame() {
-		const newGame = {
+		const newGameData = {
 			player1: pb.authStore.model.id,
+			player2: null,
 			field: Array(9).fill(''),
 			status: 'waiting',
 			gameCode: generateCode(),
@@ -127,94 +92,37 @@
 			p2Symbol: $chosenPlayer === 'X' ? 'O' : 'X',
 			turn: $chosenPlayer === 'X' ? pb.authStore.model.id : 'Player 2 ID'
 		};
-		await pb.collection('games').create(newGame);
 
-		console.log('Creating game with:', {
-			player1: pb.authStore.model.id,
-			p1Symbol,
-			p2Symbol,
-			chosenPlayer: playerSymbol
-		});
-		console.log('Created new game:', newGame);
-		console.log(player1);
-		console.log(p1Symbol);
-		localStorage.setItem('gameID', newGame.id);
-		return newGame;
+		const createdGame = await pb.collection('games').create(newGameData);
+		localStorage.setItem('gameID', createdGame.id);
+		return createdGame;
 	}
 
 	function onPageLoad() {
 		if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
 			cpuMove();
-			console.log('CPU Move');
-		}
-		if ($decideVS === 'online') {
-			console.log('Online mode selected');
-			console.log(userID);
 		}
 	}
 
 	async function setValue(index) {
-		console.log('setValue called', { index, game, boardCell: board[index] });
-
-		if (!game) {
-			console.log('No game object');
-			return;
-		}
-
-		if (board[index] !== '' || winner || isDraw) {
-			console.log('Cell occupied or game over');
-			return;
-		}
+		if (!game || board[index] !== '' || winner || isDraw) return;
 
 		const isOnline = $decideVS === 'online';
 
 		if (isOnline) {
-			// Make sure both players are present
-			if (!game.player1 || !game.player2) {
-				console.log('Not all players present', { player1: game.player1, player2: game.player2 });
-				return;
-			}
+			if (!game.player1 || !game.player2 || game.turn !== userID) return;
 
-			// Check if it's the current user's turn
-			const isMyTurn = game.turn === userID;
-
-			console.log('Turn check:', {
-				userID,
-				gameTurn: game.turn,
-				isMyTurn,
-				player1: game.player1,
-				player2: game.player2,
-				p1Symbol: game.p1Symbol,
-				p2Symbol: game.p2Symbol
-			});
-
-			if (!isMyTurn) {
-				console.log('Not your turn');
-				return;
-			}
-
-			// Determine what symbol the current player should use
 			const mySymbol = userID === game.player1 ? game.p1Symbol : game.p2Symbol;
-
 			const updatedField = [...board];
 			updatedField[index] = mySymbol;
-
-			// Calculate next turn (switch to the other player)
 			const nextTurn = game.turn === game.player1 ? game.player2 : game.player1;
 
-			console.log('Making move:', {
-				updatedField,
-				mySymbol,
-				nextTurn
-			});
-
 			await pb.collection('games').update(game.id, {
-				field: updatedField, // Use 'field' instead of 'board'
+				field: updatedField,
 				turn: nextTurn
 			});
 		} else {
 			let boardOld = [...board];
-
 			board[index] = currentPlayer;
 			currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
 			checkGameStatus();
@@ -224,7 +132,6 @@
 				setTimeout(cpuMove, 400);
 			}
 
-			// For local check comparison
 			let boardNew = [...board];
 			fetch('/checkBoard', {
 				method: 'POST',
@@ -236,15 +143,12 @@
 
 	function cpuMove() {
 		const availableMoves = board.reduce((acc, cell, index) => {
-			if (cell === '') {
-				acc.push(index);
-			}
+			if (cell === '') acc.push(index);
 			return acc;
 		}, []);
 
 		if (availableMoves.length > 0) {
-			const randomIndex = Math.floor(Math.random() * availableMoves.length);
-			const randomMove = availableMoves[randomIndex];
+			const randomMove = availableMoves[Math.floor(Math.random() * availableMoves.length)];
 			board[randomMove] = currentPlayer;
 			currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
 			checkGameStatus();
@@ -265,17 +169,11 @@
 
 		if (winner || isDraw) return;
 
-		for (const combo of winCombos) {
-			const [a, b, c] = combo;
+		for (const [a, b, c] of winCombos) {
 			if (board[a] && board[a] === board[b] && board[a] === board[c]) {
 				winner = board[a];
-
-				if (winner === 'X') {
-					scoreX++;
-				} else {
-					scoreO++;
-				}
-
+				if (winner === 'X') scoreX++;
+				else scoreO++;
 				setTimeout(() => winMod.showModal(), 100);
 				return;
 			}
@@ -283,22 +181,20 @@
 
 		if (board.every((cell) => cell !== '')) {
 			isDraw = true;
-			setTimeout(() => drawMod.showModal(), 100);
 			scoreTies++;
+			setTimeout(() => drawMod.showModal(), 100);
 		}
 	}
 
 	function restartGame() {
 		setTimeout(async () => {
 			if ($decideVS === 'online' && game) {
-				// For online games, update the database
 				await pb.collection('games').update(game.id, {
-					field: Array(9).fill(''), // Use 'field' instead of 'board'
+					field: Array(9).fill(''),
 					turn: game.p1Symbol === 'X' ? game.player1 : game.player2,
 					status: 'playing'
 				});
 			} else {
-				// For local games, just reset the state
 				board = Array(9).fill('');
 				currentPlayer = 'X';
 				winner = null;
@@ -308,7 +204,6 @@
 					cpuMove();
 				}
 			}
-
 			winMod.close();
 			drawMod.close();
 		}, 200);
