@@ -5,6 +5,7 @@
 	import Login from '$lib/components/login.svelte';
 	import { pb } from '$lib/pocketbase.js';
 	import { navigate } from 'svelte-routing';
+	import { loggedIn, refreshLoggedIn } from '$lib/stores.js';
 
 	let activeButton = $state('X');
 	let activeGameMode = $state('player');
@@ -90,10 +91,24 @@
 
 		navigateToOnlinePlayer();
 	}
+
+	async function logout() {
+		pb.authStore.clear();
+		refreshLoggedIn();
+		location.reload();
+	}
 </script>
 
 <main class="flex h-screen flex-col items-center justify-center bg-bgBlue text-gray-100">
 	{#if pb.authStore.isValid}
+		<div class="flex justify-end p-4">
+			<button
+				class=" rounded-md bg-bgBlue p-4 px-4 py-2 text-gray-100 shadow-md hover:bg-grBlue/90"
+				onclick={logout}
+			>
+				Logout
+			</button>
+		</div>
 		<div class="mb-8 flex items-center gap-2">
 			<img src="assets/images/SVG/icon-x.svg" alt="x" class="m-3 h-12 w-12" />
 			<img src="assets/images/SVG/icon-o.svg" alt="o" class="m-3 h-12 w-12" />
@@ -151,7 +166,12 @@
 	<dialog id="choose_game_id" class="modal">
 		<div class="modal-box">
 			<button class="btn btn-primary" onclick={createCode}>Create Game</button>
-			<input type="text" placeholder="Enter game Code" bind:value={gameCodeInput} />
+			<input
+				type="text"
+				placeholder="Enter game Code"
+				class="text-gray-900"
+				bind:value={gameCodeInput}
+			/>
 			<button class="btn btn-primary" onclick={joinGame}>Join Game</button>
 			<div class="modal-action">
 				<form method="dialog">

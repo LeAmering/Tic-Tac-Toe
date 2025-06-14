@@ -33,25 +33,30 @@
 		if (mode === 'online') {
 			const params = new URLSearchParams(location.search);
 			const codeParam = params.get('code');
-
+			// suche einen Eintrag der Code matcht
 			if (codeParam) {
 				const res = await pb
 					.collection('games')
 					.getList(1, 1, { filter: `gameCode="${codeParam}"` });
+				//gefundenes Spiel gespeichert
 				const fetched = res.items[0];
+				//wenn Spiel gefunden wurde und Spieler 2 nicht gesetzt ist / man nicht selbst p1 ist
 				if (
 					fetched &&
 					!fetched.player2 &&
 					fetched.status === 'waiting' &&
 					fetched.player1 !== userID
 				) {
+					// Spieler 2 wird gesetzt und der Zug wird auf den Spieler 1 gesetzt
 					const updated = await pb.collection('games').update(fetched.id, {
 						player2: userID,
 						turn: fetched.p1Symbol === 'X' ? fetched.player1 : userID
 					});
 					localStorage.setItem('gameID', fetched.id);
+					// Spiel wird aktualisiert
 					game = updated;
 				} else {
+					// Wenn kein passendes Spiel gefunden wurde, wird ein neues Spiel erstellt
 					console.error('Cannot join: game not found or not joinable.');
 					game = await createGame();
 				}
@@ -109,12 +114,6 @@
 		localStorage.setItem('gameID', createdGame.id);
 		return createdGame;
 	}
-
-	// function onPageLoad() {
-	// 	if ($decideVS === 'cpu' && $chosenPlayer === 'O') {
-	// 		cpuMove();
-	// 	}
-	// }
 
 	function onPageLoad() {
 		const mode = get(decideVS);

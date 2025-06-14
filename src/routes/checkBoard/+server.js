@@ -13,7 +13,7 @@ export async function POST({ request }) {
 			}
 		}
 
-		// Rule 1: Only one move allowed
+		// nur 1 Zug erlaubt
 		if (changes.length !== 1) {
 			return new Response(
 				JSON.stringify({ error: 'Invalid move: more than one change detected' }),
@@ -23,14 +23,14 @@ export async function POST({ request }) {
 
 		const { from, to } = changes[0];
 
-		// Rule 2: You can't overwrite an existing cell
+		// Rule 2:keine existierende Zelle
 		if (from !== '' || (to !== 'X' && to !== 'O')) {
 			return new Response(JSON.stringify({ error: 'Invalid move: illegal symbol placement' }), {
 				status: 400
 			});
 		}
 
-		// Rule 3: Enforce alternating turns
+		// Rule 3: abwechselnde Züge
 		const xCountOld = boardOld.filter((v) => v === 'X').length;
 		const oCountOld = boardOld.filter((v) => v === 'O').length;
 
